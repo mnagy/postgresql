@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Configuration settings.
 export POSTGRESQL_MAX_CONNECTIONS=${POSTGRESQL_MAX_CONNECTIONS:-100}
 export POSTGRESQL_SHARED_BUFFERS=${POSTGRESQL_SHARED_BUFFERS:-32MB}
@@ -20,8 +18,6 @@ function usage() {
   echo "  POSTGRESQL_DATABASE (regex: '$psql_identifier_regex')"
   echo "Optional:"
   echo "  POSTGRESQL_ADMIN_PASSWORD (regex: '$psql_password_regex')"
-  echo "  POSTGRESQL_REPLICA (true or false)"
-  echo "  POSTGRESQL_MASTER (host or ip address of master)"
   echo "Settings:"
   echo "  POSTGRESQL_MAX_CONNECTIONS (default: 100)"
   echo "  POSTGRESQL_SHARED_BUFFERS (default: 32MB)"
@@ -49,10 +45,9 @@ function unset_env_vars() {
   unset POSTGRESQL_PASSWORD
   unset POSTGRESQL_DATABASE
   unset POSTGRESQL_ADMIN_PASSWORD
-  unset POSTGRESQL_REPLICA
-  unset POSTGRESQL_MASTER
 }
 
+# TODO
 function wait_for_postgresql_master() {
   local master_addr=""
   while [ true ]; do
@@ -67,7 +62,9 @@ function wait_for_postgresql_master() {
     # mysqladmin --host=${master_addr} --user="${MYSQL_MASTER_USER}" \
     #   --password="${_MASTER_PASSWORD}" ping &>/dev/null && return 0
     echo "Waiting for PostgreSQL master (${master_addr}) to accept connections ..."
-    sleep 1
+    # TODO: Remove
+    sleep 10
+    break
   done
 }
 
@@ -85,7 +82,7 @@ function postgresql_master_addr() {
 
 # New config is generated every time a container is created. It only contains
 # additional custom settings and is included from $PGDATA/postgresql.conf.
-function generate_postgresql_config() 
+function generate_postgresql_config() {
   envsubst < ${POSTGRESQL_CONFIG_FILE}.template > ${POSTGRESQL_CONFIG_FILE}
 }
 
@@ -125,11 +122,15 @@ host all all all md5
 # Allow replication connections from all hosts.
 host replication all all md5
 EOF
+  # FIXME: ^^^ only allowing replication connections from specific hosts
+  #            would be a nice-to-have.
 
   pg_ctl -w start
   createuser "$POSTGRESQL_USER"
   createdb --owner="$POSTGRESQL_USER" "$POSTGRESQL_DATABASE"
   psql --command "ALTER USER \"${POSTGRESQL_USER}\" WITH ENCRYPTED PASSWORD '${POSTGRESQL_PASSWORD}';"
+
+  # TODO: Create a specialized user?
   psql --command "ALTER USER \"${POSTGRESQL_USER}\" WITH REPLICATION ;"
 
   if [ -v POSTGRESQL_ADMIN_PASSWORD ]; then

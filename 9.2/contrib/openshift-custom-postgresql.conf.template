@@ -24,5 +24,3 @@ wal_keep_segments = 400         # in logfile segments, 16MB each; 0 disables
 
 # required on replicas for replication 
 hot_standby = on
-
-

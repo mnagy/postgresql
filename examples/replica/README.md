@@ -7,17 +7,16 @@ production. Use at your own risk.**
 
 ## What is PostgreSQL replication?
 
-Replication enables data from one PostgreSQL database server (the master) to be
-replicated to one or more PostgreSQL database servers (the slaves). Replication is asynchronous - slaves do not need not be connected permanently to receive updates from the master. This means that updates can occur over long-distance connections and even over temporary or intermittent connections such as a dial-up service.  Depending on the configuration, you can replicate all databases, selected databases, or even selected tables within a database.
+Replication enables data from one PostgreSQL database server (the master) to be replicated to one or more PostgreSQL database servers (the slaves). Replication is asynchronous - slaves do not need not be connected permanently to receive updates from the master. This means that updates can occur over long-distance connections and even over temporary or intermittent connections such as a dial-up service.  Depending on the configuration, you can replicate all databases, selected databases, or even selected tables within a database.
 
 
 ## How does this example work?
 
 The provided JSON file (`postgres_replica.json`) contains a `Config` resource that groups the Kubernetes and OpenShift resources which are meant to be created.  
+
 ### Service 'pg-master'
 
 This resource provides Service for the PostgreSQL server which acts as the 'master'. 
-
 
 ### Service 'pg-slave'
 

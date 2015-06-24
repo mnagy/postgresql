@@ -54,7 +54,7 @@ function test_connection() {
   for i in $(seq $max_attempts); do
     echo "    Trying to connect..."
     set +e
-    postgresql_cmd <<< "SELECT 1;"
+    CONTAINER_IP=$ip postgresql_cmd <<< "SELECT 1;"
     status=$?
     set -e
     if [ $status -eq 0 ]; then
@@ -73,16 +73,16 @@ function test_postgresql() {
   postgresql_cmd <<< "INSERT INTO tbl VALUES ('foo2', 'bar2');"
   postgresql_cmd <<< "INSERT INTO tbl VALUES ('foo3', 'bar3');"
   postgresql_cmd <<< "SELECT * FROM tbl;"
-  postgresql_cmd <<< "DROP TABLE tbl;"
+  #postgresql_cmd <<< "DROP TABLE tbl;"
   echo "  Success!"
 }
 
 function create_container() {
   local name=$1 ; shift
-  local cargs=${CONTAINER_ARGS:-}
+  local cargs=${DOCKER_ARGS:-}
   cidfile="$CIDFILE_DIR/$name"
   # create container with a cidfile in a directory for cleanup
-  docker run $cargs --cidfile $cidfile -d "$@" $IMAGE_NAME
+  docker run $cargs --cidfile $cidfile -d $IMAGE_NAME "$@"
   echo "Created container $(cat $cidfile)"
 }
 
@@ -207,7 +207,7 @@ function run_tests() {
   if [ -v ADMIN_PASS ]; then
     envs="$envs -e POSTGRESQL_ADMIN_PASSWORD=$ADMIN_PASS"
   fi
-  create_container $name $envs
+  DOCKER_ARGS="$envs" create_container $name
   CONTAINER_IP=$(get_container_ip $name)
   test_connection $name
   echo "  Testing scl usage"
@@ -227,12 +227,44 @@ function run_tests() {
   test_postgresql $name
 }
 
+function run_replication_tests() {
+  USER=user
+  PASS=pass
+  envs="-e POSTGRESQL_USER=$USER -e POSTGRESQL_PASSWORD=$PASS -e POSTGRESQL_DATABASE=db"
+
+  # Launch master
+  DOCKER_ARGS="$envs" create_container master postgresql-master
+  master_ip=$(get_container_ip master)
+  test_connection master
+
+  # This will create a new table.
+  CONTAINER_IP=$master_ip test_postgresql master
+  CONTAINER_IP=$master_ip postgresql_cmd <<< "SELECT * FROM tbl;"
+
+  local replicas_to_launch=2
+  # Launch replicas
+  for i in $(seq $replicas_to_launch); do
+    # TODO: Test by creating a fake hosts file on replicas, without using POSTGRESQL_MASTER_IP
+    DOCKER_ARGS="$envs -e POSTGRESQL_MASTER_IP=$master_ip" create_container "replica_$i" postgresql-slave
+  done
+  for i in $(seq $replicas_to_launch); do
+    test_connection replica_$i
+  done
+
+  MEH=$(CONTAINER_IP=$master_ip postgresql_cmd <<< "SELECT COUNT(*) FROM tbl;")
+  echo "Got $MEH"
+}
+
 # Tests.
+
+run_replication_tests
+# TODO: Remove me
+exit
 
 run_container_creation_tests
 run_configuration_tests
 USER=user PASS=pass run_tests no_admin
 USER=user1 PASS=pass1 ADMIN_PASS=r00t run_tests admin
 # Test with arbitrary uid for the container
-CONTAINER_ARGS="-u 12345" USER=user2 PASS=pass run_tests no_admin_altuid
-CONTAINER_ARGS="-u 12345" USER=user3 PASS=pass1 ADMIN_PASS=r00t run_tests admin_altuid
+DOCKER_ARGS="-u 12345" USER=user2 PASS=pass run_tests no_admin_altuid
+DOCKER_ARGS="-u 12345" USER=user3 PASS=pass1 ADMIN_PASS=r00t run_tests admin_altuid
